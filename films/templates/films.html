@@ -2,8 +2,6 @@
 
 {% block content %}
 <div class="align-center col-10 offset-1">
-    
-    
     <div id="film-list">
         {% include 'partials/film-list.html' %}
     </div>
@@ -11,7 +9,9 @@
 <script>
     document.body.addEventListener('htmx:afterSwap', function() {
         const form = document.querySelector("#film-form");
-        form.reset();
+        if (form) {
+            form.reset();
+        }
     });
 </script>
 {% endblock content %}

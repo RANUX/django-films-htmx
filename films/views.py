@@ -41,9 +41,15 @@ class FilmList(LoginRequiredMixin, ListView):
     template_name = 'films.html'
     model = Film
     context_object_name = 'films'
+    paginate_by = 10
 
     def get_queryset(self):
         return UserFilms.objects.select_related('film').filter(user=self.request.user)
+
+    def get_template_names(self):
+        if self.request.htmx:
+            return 'partials/film-list-elements.html'
+        return 'films.html'
 
 class AddFilm(LoginRequiredMixin, View):
     def post(self, request):
@@ -84,13 +90,28 @@ class ClearTextContent(LoginRequiredMixin, View):
 
 class SortFilms(LoginRequiredMixin, View):
     def post(self, request):
-        # film_pks_order = request.POST.getlist('film_order')
-        # films = []
-        # for idx, film_pk in enumerate(film_pks_order, start=1):
-        #     userfilm = UserFilms.objects.get(pk=film_pk)
-        #     userfilm.order = idx
-        #     userfilm.save()
-        #     films.append(userfilm)
+        film_pks_order = request.POST.getlist('film_order')
+        films = []
+        updated_films = []
+
+        # Get a queryset of UserFilms objects related to the user making the request
+        userfilms = UserFilms.objects.select_related('film').filter(user=self.request.user)
+
+        # Loop through each film pk in the film_pks_order list
+        for idx, film_pk in enumerate(film_pks_order, start=1):
+            # userfilm = UserFilms.objects.get(pk=film_pk)
+            # Get the UserFilms object with a primary key matching the current film_pk without hitting db
+            userfilm = next(u for u in userfilms if u.pk == int(film_pk))
+
+            # If the order of the UserFilms object doesn't match the current index, update it
+            if userfilm.order != idx:
+                userfilm.order = idx
+                updated_films.append(userfilm)
+            # userfilm.save()
+            films.append(userfilm)
+
+        # Update the order values for all UserFilms objects that were modified
+        UserFilms.objects.bulk_update(updated_films, ['order'])
 
         # In this code, we first convert the list of film primary keys to integers 
         # (assuming they were originally strings).
@@ -104,17 +125,17 @@ class SortFilms(LoginRequiredMixin, View):
         # This approach is more efficient than updating each UserFilms object individually, 
         # as it reduces the number of database queries required to update the objects.
 
-        film_pks_order = request.POST.getlist('film_order')
-        film_pks_order = [int(pk) for pk in film_pks_order]
+        # film_pks_order = request.POST.getlist('film_order')
+        # film_pks_order = [int(pk) for pk in film_pks_order]
 
-        # Build a Case/When statement to update the order field for each UserFilms object
-        cases = [When(pk=pk, then=order) for order, pk in enumerate(film_pks_order, start=1)]
+        # # Build a Case/When statement to update the order field for each UserFilms object
+        # cases = [When(pk=pk, then=order) for order, pk in enumerate(film_pks_order, start=1)]
 
-        # Use bulk update to update the order field for all UserFilms objects at once
-        UserFilms.objects.filter(pk__in=film_pks_order).update(order=Case(*cases, output_field=IntegerField()))
+        # # Use bulk update to update the order field for all UserFilms objects at once
+        # UserFilms.objects.filter(pk__in=film_pks_order, user=self.request.user).update(order=Case(*cases, output_field=IntegerField()))
 
-        # Retrieve the updated UserFilms objects
-        films = UserFilms.objects.select_related('film').filter(pk__in=film_pks_order)
+        # # Retrieve the updated UserFilms objects
+        #films = UserFilms.objects.select_related('film').filter(pk__in=film_pks_order, user=self.request.user)
 
         return render(request, 'partials/film-list.html', { 'films': films })
 
